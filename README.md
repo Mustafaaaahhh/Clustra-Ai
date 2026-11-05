@@ -1,2 +1,2 @@
 # Clustra-Ai
-Clustra Ai Made In First Semester
+Clustra Ai, Made For Problem Solvers
