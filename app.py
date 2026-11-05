@@ -1,36 +1,34 @@
 import json
 import os
+from flask import Flask, request, jsonify
 from openai import OpenAI
-from dotenv import load_dotenv
 
-load_dotenv()
+app = Flask(__name__)
 
 client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
-api_key = os.environ.get("API_KEY")
+    api_key=os.environ.get("API_KEY"),
 )
 
 MODEL = "openai/gpt-oss-120b"
-HISTORY_FILE = "chat_history.json"
-OWNER_FILE = "Remember_owner.json"
-MAX_MESSAGES = 20  # how many recent messages to remember
+MAX_MESSAGES = 20
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OWNER_FILE = os.path.join(BASE_DIR, "Remember_owner.json")
 
 BASE_PROMPT = "You are Clustra AI. Answer in 1-3 short sentences."
 
 
 def load_owner_info():
-    """Read the owner file. Returns the data, or None if missing/broken."""
     if os.path.exists(OWNER_FILE):
         try:
             with open(OWNER_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
-            print("Warning: could not read", OWNER_FILE, "- check it is valid JSON.")
+            pass
     return None
 
 
 def build_system_message():
-    """Combine the base prompt with the owner facts, fresh every time."""
     content = BASE_PROMPT
     owner = load_owner_info()
     if owner:
@@ -42,70 +40,123 @@ def build_system_message():
     return {"role": "system", "content": content}
 
 
-def load_history():
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return []
+PAGE = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clustra AI</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 16px; }
+  #chat { border: 1px solid #ccc; border-radius: 8px; padding: 12px; height: 60vh; overflow-y: auto; }
+  .you { color: #0a58ca; margin: 8px 0; }
+  .ai { color: #222; margin: 8px 0; }
+  #row { display: flex; gap: 8px; margin-top: 12px; }
+  #msg { flex: 1; padding: 10px; }
+  button { padding: 10px 14px; }
+</style>
+</head>
+<body>
+<h2>Clustra AI</h2>
+<div id="chat"></div>
+<div id="row">
+  <input id="msg" placeholder="Type a message..." autocomplete="off">
+  <button onclick="send()">Send</button>
+  <button onclick="clearChat()">Clear</button>
+</div>
+<script>
+let history = [];
+try { history = JSON.parse(localStorage.getItem("clustra_history")) || []; } catch (e) {}
+
+const chat = document.getElementById("chat");
+const input = document.getElementById("msg");
+
+function add(cls, who, text) {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = who + ": " + text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+function save() {
+  try { localStorage.setItem("clustra_history", JSON.stringify(history)); } catch (e) {}
+}
+
+history.forEach(m => add(m.role === "user" ? "you" : "ai", m.role === "user" ? "You" : "Clustra AI", m.content));
+
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  add("you", "You", text);
+  history.push({ role: "user", content: text });
+  const waiting = add("ai", "Clustra AI", "...");
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history: history })
+    });
+    const data = await res.json();
+    if (data.reply) {
+      waiting.textContent = "Clustra AI: " + data.reply;
+      history.push({ role: "assistant", content: data.reply });
+      save();
+    } else {
+      waiting.textContent = "Error: " + (data.error || "unknown");
+      history.pop();
+    }
+  } catch (e) {
+    waiting.textContent = "Error: could not reach server";
+    history.pop();
+  }
+}
+
+function clearChat() {
+  history = [];
+  save();
+  chat.innerHTML = "";
+}
+
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+</script>
+</body>
+</html>"""
 
 
-def save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+@app.route("/")
+def home():
+    return PAGE
 
 
-history = load_history()  # saved messages, without the system message
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.get_json(silent=True) or {}
+    history = data.get("history", [])
 
-if history:
- #   print(f"Clustra AI remembers your last chat ({len(history)} messages)." 
-    print("Hello User! ")
+    # only allow user/assistant messages from the browser
+    clean = [
+        {"role": m["role"], "content": str(m["content"])}
+        for m in history
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant") and "content" in m
+    ]
 
-
-
-while True:
-    user_message = input("You: ").strip()
-
-    if user_message.lower() == "bye":
-        print("Clustra AI: Goodbye!")
-        break
-
-    if user_message.lower() == "clear":
-        history = []
-        save_history(history)
-        print("Clustra AI: Memory cleared.")
-        continue
-    if not user_message:
-        continue
-
-    history.append({"role": "user", "content": user_message})
+    if not clean:
+        return jsonify({"error": "No message"}), 400
 
     try:
-        stream = client.chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL,
-            messages=[build_system_message()] + history[-MAX_MESSAGES:],
-            stream=True,
-            max_tokens=7000,
-            reasoning_effort="high",
+            messages=[build_system_message()] + clean[-MAX_MESSAGES:],
+            max_tokens=2000,
+            reasoning_effort="low",
         )
-
-        print("Clustra AI: ", end="", flush=True)
-        reply = ""
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                text = chunk.choices[0].delta.content
-                print(text, end="", flush=True)
-                reply += text
-        print()
-
-        history.append({"role": "assistant", "content": reply})
-        save_history(history)
-
+        return jsonify({"reply": response.choices[0].message.content})
     except Exception as e:
-        print("\nError:", e)
-        history.pop()  # remove the failed message
+        return jsonify({"error": str(e)}), 500
 
-        
-        
+
+if __name__ == "__main__":
+    app.run(debug=True)
