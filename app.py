@@ -347,7 +347,7 @@ def chat():
             model=MODEL,
             messages=[build_system_message()] + clean[-MAX_MESSAGES:],
             max_tokens=2000,
-            reasoning_effort="low",
+            reasoning_effort="high",
         )
         return jsonify({"reply": response.choices[0].message.content})
     except Exception as e:
