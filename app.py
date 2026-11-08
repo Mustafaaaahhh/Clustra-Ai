@@ -47,6 +47,7 @@ PAGE = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clustra AI</title>
+<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
