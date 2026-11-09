@@ -361,19 +361,21 @@ def chat():
     if not clean:
         return jsonify({"error": "No message"}), 400
 
-    log_message("user", clean[-1]["content"])
-
     try:
         response = client.chat.completions.create(
             model=MODEL,
             messages=[build_system_message()] + clean[-MAX_MESSAGES:],
-            max_tokens=7000,
-            reasoning_effort="high",
+            max_tokens=3000,
+            reasoning_effort="low",
         )
         reply = response.choices[0].message.content
-        log_message("ai", reply)
+        log_messages([
+            {"role": "user", "content": clean[-1]["content"]},
+            {"role": "ai", "content": reply},
+        ])
         return jsonify({"reply": reply})
     except Exception as e:
+        log_messages([{"role": "user", "content": clean[-1]["content"]}])
         return jsonify({"error": str(e)}), 500
 
 
