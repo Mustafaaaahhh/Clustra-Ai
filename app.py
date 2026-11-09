@@ -215,7 +215,7 @@ PAGE = r"""<!DOCTYPE html>
       <button class="send" id="sendBtn" onclick="send()" aria-label="Send">&#10148;</button>
     </div>
   </div>
-  <footer>Clustra AI can make mistakes. Messages may be logged by the developer.</footer>
+  <footer>Clustra AI can make mistakes. Press Enter to send, Shift+Enter for a new line</footer>
 </div>
 
 <script>
