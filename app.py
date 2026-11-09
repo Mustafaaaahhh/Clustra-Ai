@@ -16,8 +16,7 @@ MAX_MESSAGES = 20
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OWNER_FILE = os.path.join(BASE_DIR, "Remember_owner.json")
 
-BASE_PROMPT = "You are Clustra AI. Answer in 1-3 short sentences."
-
+BASE_PROMPT = "You are Clustra AI. Answer in 1-3 short sentences.Do not make claims about privacy or data storage."
 
 def load_owner_info():
     if os.path.exists(OWNER_FILE):
