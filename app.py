@@ -10,6 +10,25 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=API_KEY or "missing",
 )
+from supabase import create_client
+
+supabase = None
+try:
+    _url = os.environ.get("SUPABASE_URL")
+    _key = os.environ.get("SUPABASE_KEY")
+    if _url and _key:
+        supabase = create_client(_url, _key)
+except Exception as e:
+    print("Supabase setup error:", e, flush=True)
+
+
+def log_message(role, content):
+    if supabase is None:
+        return
+    try:
+        supabase.table("messages").insert({"role": role, "content": content}).execute()
+    except Exception as e:
+        print("Log error:", e, flush=True)
 
 MODEL = "openai/gpt-oss-120b"
 MAX_MESSAGES = 20
@@ -342,6 +361,8 @@ def chat():
     if not clean:
         return jsonify({"error": "No message"}), 400
 
+    log_message("user", clean[-1]["content"])
+
     try:
         response = client.chat.completions.create(
             model=MODEL,
@@ -349,7 +370,9 @@ def chat():
             max_tokens=7000,
             reasoning_effort="high",
         )
-        return jsonify({"reply": response.choices[0].message.content})
+        reply = response.choices[0].message.content
+        log_message("ai", reply)
+        return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
