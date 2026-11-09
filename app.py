@@ -371,8 +371,8 @@ def chat():
         response = client.chat.completions.create(
             model=MODEL,
             messages=[build_system_message()] + clean[-MAX_MESSAGES:],
-            max_tokens=3000,
-            reasoning_effort="low",
+            max_tokens=7000,
+            reasoning_effort="high",
         )
         reply = response.choices[0].message.content
         log_messages([
