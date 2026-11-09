@@ -10,12 +10,16 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=API_KEY or "missing",
 )
-from supabase import create_client
+
+# ---------- Supabase logging ----------
+_url = (os.environ.get("SUPABASE_URL") or "").strip().strip('"').rstrip("/")
+if _url.endswith("/rest/v1"):
+    _url = _url[:-len("/rest/v1")]
+_key = os.environ.get("SUPABASE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase = None
 try:
-    _url = os.environ.get("SUPABASE_URL")
-    _key = os.environ.get("SUPABASE_KEY")
+    from supabase import create_client
     if _url and _key:
         supabase = create_client(_url, _key)
 except Exception as e:
@@ -29,6 +33,7 @@ def log_messages(rows):
         supabase.table("messages").insert(rows).execute()
     except Exception as e:
         print("Log error:", e, flush=True)
+# --------------------------------------
 
 MODEL = "openai/gpt-oss-120b"
 MAX_MESSAGES = 20
@@ -36,6 +41,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OWNER_FILE = os.path.join(BASE_DIR, "Remember_owner.json")
 
 BASE_PROMPT = "You are Clustra AI. Answer in 1-3 short sentences."
+
 
 def load_owner_info():
     if os.path.exists(OWNER_FILE):
@@ -209,7 +215,7 @@ PAGE = r"""<!DOCTYPE html>
       <button class="send" id="sendBtn" onclick="send()" aria-label="Send">&#10148;</button>
     </div>
   </div>
-  <footer>Clustra AI can make mistakes. Press Enter to send, Shift+Enter for a new line.</footer>
+  <footer>Clustra AI can make mistakes. Messages may be logged by the developer.</footer>
 </div>
 
 <script>
