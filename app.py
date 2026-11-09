@@ -22,11 +22,11 @@ except Exception as e:
     print("Supabase setup error:", e, flush=True)
 
 
-def log_message(role, content):
+def log_messages(rows):
     if supabase is None:
         return
     try:
-        supabase.table("messages").insert({"role": role, "content": content}).execute()
+        supabase.table("messages").insert(rows).execute()
     except Exception as e:
         print("Log error:", e, flush=True)
 
