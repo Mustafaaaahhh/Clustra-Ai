@@ -157,9 +157,12 @@ textarea::placeholder{color:#5f6170;transition:opacity .3s}
 .dbody{flex:1;overflow-y:auto;padding:30px 32px 60px;outline:0;color:#dedcd7;overscroll-behavior:contain}
 .dbody h2{font:400 32px/1.15 var(--serif);letter-spacing:-.01em;margin-bottom:14px}
 .dbody h3{font:600 14px/1.4 'Manrope',sans-serif;margin:26px 0 8px;color:var(--gold)}
-.dbody p,.dbody li{color:#bdbcb8}.dbody ul{padding-left:20px;margin:6px 0}.dbody li{margin:4px 0}
+.dbody p,.dbody li{color:#bdbcb8}.dbody ul,.dbody ol{padding-left:20px;margin:6px 0}.dbody li{margin:4px 0}
 .dbody code{font:.88em var(--mono);padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.07)}
 .dbody.swap{animation:blk .6s var(--ease) both}
+.dbody pre{margin:12px 0;padding:12px 14px;border-radius:10px;background:#07080b;border:1px solid var(--line);overflow-x:auto;font:13px/1.65 var(--mono);color:#d9dbe3}
+.dbody pre code{padding:0;background:none}.dbody hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+.recent[hidden]{display:none}
 
 /* ---- Search ---- */
 .sm{position:fixed;inset:0;z-index:60;display:flex;justify-content:center;align-items:flex-start;padding:14vh 16px 0;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .45s var(--ease)}
@@ -229,11 +232,8 @@ body.focus .t{text-shadow:0 0 22px rgba(255,255,255,.14);transition:text-shadow 
   <aside id="side">
     <div class="brand"><svg><use href="#mark"/></svg>Clustra</div>
     <div class="acts"><button class="new" id="newchat"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New chat</button><button class="search" id="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Search<kbd id="kb">Ctrl K</kbd></button></div>
-    <div class="recent"><small>Docs</small>
-      <button class="dl" data-doc="plan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Project plan</button>
-      <button class="dl" data-doc="notes"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>Study notes</button>
-    </div>
-    <div class="recent"><small>Chats and tasks</small><div id="chats"></div></div>
+    <div class="recent" id="docsec" hidden><small>Docs</small><div id="docslist"></div></div>
+    <div class="recent" id="chatsec" hidden><small>Chats and tasks</small><div id="chats"></div></div>
     <div class="me"><i>G</i>Guest</div>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -241,7 +241,7 @@ body.focus .t{text-shadow:0 0 22px rgba(255,255,255,.14);transition:text-shadow 
     <header class="top">
       <button class="ico" id="tog" aria-label="Open menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
       <button class="fsx" id="exitfs" aria-label="Exit full screen" title="Exit full screen (Esc)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
-      <span class="pill"><b></b>Clustra</span>
+      <span class="pill"><b></b>Clustra 1</span>
       <span class="ctitle" id="ctitle"></span>
     </header>
     <section id="feed"><div class="col" id="col">
@@ -331,17 +331,28 @@ function render(box,text,live){
   else cursor.remove();
 }
 
-/* ---------- Reply source ---------- */
-/* Demo reply. Replace getReply() with a real call later, e.g.
-   const r = await fetch('/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({history:h})});
-   return (await r.json()).reply; */
-const F='`'.repeat(3);
-const DEMO=['Here is a small chat loop that keeps the conversation history:','',F+'python','history = []','','while True:','    text = input("You: ")','    if text == "bye":','        break','    history.append({"role": "user", "content": text})','    # send history to the model, then print the reply','    print("AI:", len(history), "messages stored")',F,'','Each turn adds your message to `history`, so the model can see the whole conversation.'].join('\n');
+/* ---------- Backend ---------- */
+/* /chat returns {reply, doc}. doc is null, or {title, markdown} when the request was docs-worthy.
+   Earlier documents are sent back inside the history so the model can edit them. */
 async function getReply(h){
-  const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history:h})});
+  const msgs=h.map(m=>{
+    let c=m.content;
+    if(m.role==='assistant'&&m.doc&&DOCS[m.doc])c+='\n\n<doc title="'+DOCS[m.doc].t.replace(/"/g,"'")+'">\n'+docText(DOCS[m.doc])+'\n</doc>';
+    return {role:m.role,content:c};
+  });
+  const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({history:msgs})});
   const d=await r.json().catch(()=>({}));
   if(!r.ok||!d.reply)throw new Error(d.error||'bad response');
-  return d.reply;
+  return d;
+}
+/* Short professional chat title from the model. Returns null on any failure (the rule-based title stays). */
+async function getTitle(t){
+  try{
+    const r=await fetch('/title',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+    if(!r.ok)return null;
+    const s=((await r.json()).title||'').trim();
+    return s&&s.length<=60?s:null;
+  }catch(e){return null;}
 }
 
 /* ---------- Message helpers ---------- */
@@ -397,20 +408,28 @@ async function send(txt){
   if(!t||busy||swapping)return;
   busy=true;ta.value='';fit();upd();
   const w=$('.hello');if(w){w.classList.add('leave');await new Promise(r=>setTimeout(r,320));w.remove();}
-  if(!cur){cur={id:++nid,title:makeTitle(t),hist:hist,fresh:true};chats.unshift(cur);renderChats();setTitle(cur.title,true);}
+  if(!cur){
+    const c=cur={id:++nid,title:makeTitle(t),hist:hist,fresh:true};
+    chats.unshift(c);renderChats();setTitle(c.title,true);save();
+    getTitle(t).then(nt=>{if(!nt)return;c.title=nt;renderChats();if(cur===c)setTitle(nt,true);save();});
+  }
   addUser(t);hist.push({role:'user',content:t});
   const box=addAI();box.innerHTML=DOTS;
   stick=true;toEnd(true);
-  let full;
-  try{full=await getReply(hist);}catch(e){full='Something went wrong. Check your connection and try again.';}
+  let full,doc=null;
+  try{const d=await getReply(hist);full=d.reply;doc=d.doc;}catch(e){full='Something went wrong. Check your connection and try again.';}
   box.innerHTML='';box._n=[];
   stick=feed.scrollHeight-feed.scrollTop-feed.clientHeight<140;
   await stream(box,full);
-  if(/plan|doc|notes|report|essay/i.test(t)){
-    box.insertAdjacentHTML('beforeend','<button class="docard blk" data-doc="plan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span><b>Project plan</b><small>Document</small></span><i>Open</i></button>');
+  let docId=null;
+  if(doc&&doc.markdown){
+    docId=saveDoc(doc.title,doc.markdown);
+    box.insertAdjacentHTML('beforeend',docCard(docId));
     if(stick)toEnd(true);
+    if(innerWidth>860)openDoc(docId);
   }
-  hist.push({role:'assistant',content:full});
+  const msg={role:'assistant',content:full};if(docId)msg.doc=docId;
+  hist.push(msg);save();
   busy=false;upd();ta.focus();armIdle();
 }
 
@@ -427,12 +446,49 @@ col.addEventListener('click',e=>{
 });
 
 /* ---------- Docs panel ---------- */
-const DOCS={
-  plan:{t:'Project plan',h:'<h2>Project plan</h2><p>A short plan to take an idea from sketch to a live website.</p><h3>1. Define the goal</h3><p>Write one sentence about who the site is for and what they should be able to do.</p><h3>2. Build the front end</h3><ul><li>Layout and navigation</li><li>Chat page and documents panel</li></ul><h3>3. Connect the backend</h3><ul><li>Add the chat route</li><li>Keep API keys in environment variables</li></ul><h3>4. Deploy</h3><p>Push to GitHub and import the folder into Vercel.</p>'},
-  notes:{t:'Study notes',h:'<h2>Study notes</h2><p>Key ideas to revise, in plain words.</p><h3>Loops</h3><p>A <code>while</code> loop repeats until its condition is false.</p><h3>Functions</h3><p>A function packs code you want to reuse.</p>'}
-};
+let DOCS={},dnid=0,curDoc=null,docSave;
+const DOCI='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>';
+/* Markdown from the model -> HTML for the docs panel (everything is escaped). */
+function mdDoc(md,title){
+  const out=[];let list=null,code=null,para=[];
+  const fp=()=>{if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[];}};
+  const fl=()=>{if(list){out.push('<'+list.t+'>'+list.i.map(x=>'<li>'+inline(x)+'</li>').join('')+'</'+list.t+'>');list=null;}};
+  for(const raw of md.replace(/\r/g,'').split('\n')){
+    const l=raw.trim();
+    if(code){if(/^```/.test(l)){out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');code=null;}else code.push(raw);continue;}
+    if(/^```/.test(l)){fp();fl();code=[];continue;}
+    if(!l){fp();fl();continue;}
+    let m;
+    if((m=l.match(/^(#{1,4})\s+(.*)$/))){fp();fl();out.push(m[1].length===1?'<h2>'+inline(m[2])+'</h2>':'<h3>'+inline(m[2])+'</h3>');}
+    else if(/^([-*_])\1{2,}$/.test(l)){fp();fl();out.push('<hr>');}
+    else if((m=l.match(/^[-*\u2022]\s+(.*)$/))){fp();if(!list||list.t!=='ul'){fl();list={t:'ul',i:[]};}list.i.push(m[1]);}
+    else if((m=l.match(/^\d+[.)]\s+(.*)$/))){fp();if(!list||list.t!=='ol'){fl();list={t:'ol',i:[]};}list.i.push(m[1]);}
+    else{fl();para.push(l);}
+  }
+  if(code)out.push('<pre><code>'+esc(code.join('\n'))+'</code></pre>');
+  fp();fl();
+  let h=out.join('');
+  if(!/^<h2>/.test(h))h='<h2>'+esc(title)+'</h2>'+h;
+  return h;
+}
+function docText(d){if(!d.edited)return d.md;const e=document.createElement('div');e.innerHTML=d.h;return e.textContent;}
+/* A doc with the same title in the same chat is updated in place, otherwise a new doc is added. */
+function saveDoc(title,md){
+  title=(title||'Untitled document').replace(/\s+/g,' ').trim().slice(0,80);
+  let d=Object.values(DOCS).find(x=>x.chat===(cur?cur.id:0)&&x.t.toLowerCase()===title.toLowerCase());
+  if(d){d.md=md;d.h=mdDoc(md,title);d.edited=false;}
+  else{const id='d'+(++dnid);d=DOCS[id]={id:id,t:title,md:md,h:mdDoc(md,title),chat:cur?cur.id:0,fresh:true};}
+  renderDocs();save();return d.id;
+}
+function docCard(id){return '<button class="docard blk" data-doc="'+id+'">'+DOCI+'<span><b>'+esc(DOCS[id].t)+'</b><small>Document</small></span><i>Open</i></button>';}
+function renderDocs(){
+  const arr=Object.values(DOCS).sort((a,b)=>+b.id.slice(1)-+a.id.slice(1));
+  $('#docsec').hidden=!arr.length;
+  $('#docslist').innerHTML=arr.map(d=>'<button class="dl'+(d.fresh?' fresh':'')+'" data-doc="'+d.id+'">'+DOCI+esc(d.t)+'</button>').join('');
+  arr.forEach(d=>{d.fresh=false;});
+}
 function openDoc(k){
-  const d=DOCS[k];if(!d)return;
+  const d=DOCS[k];if(!d)return;curDoc=k;
   const body=$('#dbody');
   $('#dtitle').textContent=d.t;body.innerHTML=d.h;
   body.classList.remove('swap');void body.offsetWidth;body.classList.add('swap');
@@ -440,6 +496,7 @@ function openDoc(k){
   side.classList.remove('open');scrim.classList.remove('open');
 }
 document.addEventListener('click',e=>{const b=e.target.closest('[data-doc]');if(b)openDoc(b.dataset.doc);});
+$('#dbody').addEventListener('input',()=>{const d=DOCS[curDoc];if(!d)return;d.h=$('#dbody').innerHTML;d.edited=true;clearTimeout(docSave);docSave=setTimeout(save,500);});
 $('#dclose').onclick=()=>$('#docs').classList.remove('open');
 $('#dcopy').onclick=e=>{const b=e.currentTarget;navigator.clipboard.writeText($('#dbody').innerText).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1500);}).catch(()=>{});};
 $('#ddl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([$('#dbody').innerText],{type:'text/plain'}));a.download=($('#dtitle').textContent||'document')+'.txt';a.click();URL.revokeObjectURL(a.href);};
@@ -491,9 +548,10 @@ new ResizeObserver(()=>place()).observe(ta);   // keeps the glowing cursor align
 /* ---------- Chats: named automatically from the first message ---------- */
 const CAPS={json:'JSON',api:'API',css:'CSS',html:'HTML',sql:'SQL',ai:'AI',js:'JS',python:'Python',flask:'Flask',vercel:'Vercel',github:'GitHub',supabase:'Supabase',groq:'Groq',javascript:'JavaScript'};
 const LEADS=[[/^(fix|debug|solve)\b/,'Fixing'],[/^(explain|describe)\b/,'Explaining'],[/^write\b/,'Writing'],[/^(make|create|build|generate)\b/,'Building'],[/^plan\b/,'Planning'],[/^(review|check|test)\b/,'Reviewing']];
-/* Later you can ask the model for a 3 to 5 word title instead of this rule-based one. */
+/* Instant rule-based title. The model's title (getTitle) replaces it a moment later. */
 function makeTitle(t){
   let s=t.replace(/\s+/g,' ').trim(),verb='';
+  if(/^(hi+|hello+|hey+|heya|yo|hola|salam|assalam[ -]?o[ -]?alaikum|good (morning|afternoon|evening)|greetings|sup|what'?s up)(\s+(there|all|everyone|clustra(\s+ai)?))?[\s!.,?]*$/i.test(s))return 'Greetings';
   const err=s.match(/\b\w*(?:Error|Exception)\b/);
   s=s.replace(/^(please|can you|could you|would you|help me|i need to|i need|i want to|i want|how do i|how can i|how to|what is|what's|tell me|show me|give me)\s+/i,'');
   for(const [re,v] of LEADS){if(re.test(s.toLowerCase())){verb=v;s=s.replace(new RegExp(re.source,'i'),'').trim();break;}}
@@ -504,14 +562,15 @@ function makeTitle(t){
   r=((verb?verb+' ':'')+r).trim();
   return r?r.charAt(0).toUpperCase()+r.slice(1):'New chat';
 }
-let chats=[
-  {id:1,title:'Fix a Flask deploy error',hist:[{role:'user',content:'My Flask app fails to deploy on Vercel.'},{role:'assistant',content:'Vercel needs a top-level Flask object named `app` in `app.py`. Check the file name, and that `requirements.txt` lists flask.'}]},
-  {id:2,title:'Explain async and await',hist:[{role:'user',content:'Explain async and await simply.'},{role:'assistant',content:'`async` marks a function that can pause. `await` pauses it until a slow task, like a network call, finishes.'}]},
-  {id:3,title:'Budget maths check',hist:[{role:'user',content:'What is 11,525 x 1.18?'},{role:'assistant',content:'11,525 x 1.18 = 13,599.50.'}]}
-],cur=null,nid=10,tt;
+let chats=[],cur=null,nid=0,tt;
+/* Chats and docs are kept in this browser (localStorage), so recents survive a refresh. */
+const KEY='clustra_state_v1';
+function save(){try{localStorage.setItem(KEY,JSON.stringify({chats:chats,docs:DOCS,nid:nid,dnid:dnid}));}catch(e){}}
+(function load(){try{const v=JSON.parse(localStorage.getItem(KEY)||'null');if(v){chats=v.chats||[];DOCS=v.docs||{};nid=v.nid||0;dnid=v.dnid||0;}}catch(e){}})();
 let swapping=false;
 function swap(fn){swapping=true;col.classList.add('out');setTimeout(()=>{fn();requestAnimationFrame(()=>{col.classList.remove('out');swapping=false;});},260);}
 function renderChats(){
+  $('#chatsec').hidden=!chats.length;
   $('#chats').innerHTML=chats.map(c=>'<button data-chat="'+c.id+'" class="'+(cur&&cur.id===c.id?'on ':'')+(c.fresh?'fresh':'')+'">'+esc(c.title)+'</button>').join('');
   chats.forEach(c=>{c.fresh=false;});
 }
@@ -528,11 +587,11 @@ function loadChat(id){
   if(busy)return;
   const c=chats.find(x=>x.id===id);if(!c)return;
   cur=c;hist=c.hist;const h=c.hist;setTitle(c.title);renderChats();
-  swap(()=>{col.innerHTML='';h.forEach(m=>{if(m.role==='user')addUser(m.content);else{const b=addAI();render(b,m.content,false);}});toEnd(false);stick=true;});
+  swap(()=>{col.innerHTML='';h.forEach(m=>{if(m.role==='user')addUser(m.content);else{const b=addAI();render(b,m.content,false);if(m.doc&&DOCS[m.doc])b.insertAdjacentHTML('beforeend',docCard(m.doc));}});toEnd(false);stick=true;});
   side.classList.remove('open');scrim.classList.remove('open');
 }
 $('#chats').addEventListener('click',e=>{const b=e.target.closest('[data-chat]');if(b)loadChat(+b.dataset.chat);});
-renderChats();
+renderChats();renderDocs();
 
 /* ---------- Search window (Ctrl or Cmd + K) ---------- */
 const sm=$('#sm'),sq=$('#sq'),sres=$('#sres');
@@ -540,7 +599,7 @@ if(/Mac|iPhone|iPad/.test(navigator.platform))$('#kb').textContent='\u2318K';
 function runSearch(){
   const q=sq.value.trim().toLowerCase();
   const rows=chats.map(c=>({k:'chat',id:c.id,t:c.title,h:c.hist.map(m=>m.content).join(' ').toLowerCase()}))
-    .concat(Object.keys(DOCS).map(k=>({k:'doc',id:k,t:DOCS[k].t,h:''})))
+    .concat(Object.values(DOCS).map(d=>({k:'doc',id:d.id,t:d.t,h:d.h.replace(/<[^>]+>/g,' ').toLowerCase()})))
     .filter(r=>!q||r.t.toLowerCase().includes(q)||r.h.includes(q));
   sres.innerHTML=rows.length?rows.map(r=>'<button data-sk="'+r.k+'" data-sid="'+r.id+'"><span>'+esc(r.t)+'</span><small>'+(r.k==='chat'?'Chat':'Document')+'</small></button>').join(''):'<p class="none">No results</p>';
 }
