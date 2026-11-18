@@ -171,7 +171,7 @@ def title():
                 {"role": "system", "content": TITLE_PROMPT},
                 {"role": "user", "content": text},
             ],
-            max_tokens=8000,
+            max_tokens=20,
             reasoning_effort="high",
         )
         raw = (response.choices[0].message.content or "").strip()
