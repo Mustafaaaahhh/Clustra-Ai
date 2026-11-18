@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from flask import Flask, request, jsonify, send_from_directory
 from openai import OpenAI
 
@@ -44,7 +45,50 @@ OWNER_FILE = os.path.join(BASE_DIR, "Remember_owner.json")
 HTML_DIR = os.path.join(BASE_DIR, "html")          # new website
 OLD_HTML_DIR = os.path.join(BASE_DIR, "html_old")  # old website (kept for fun)
 
-BASE_PROMPT = "You are Clustra AI. Answer in 1-2 short sentences."
+BASE_PROMPT = (
+    "You are Clustra AI. For normal chat, answer in 1-2 short sentences "
+    "(longer only when the user asks for code or detail).\n\n"
+    "DOCUMENTS: when the user asks you to create a standalone document "
+    "(a plan, report, essay, study notes, guide, letter, email draft, resume, "
+    "proposal, outline, checklist, README, article, and similar), put the "
+    "complete document inside exactly one block like this:\n"
+    '<doc title="Short Professional Title">\n'
+    "...the document in Markdown (# title, ## sections, - bullets, 1. steps)...\n"
+    "</doc>\n"
+    "Outside the block write only one short sentence saying it is ready. "
+    "Never use a <doc> block for ordinary questions, quick answers or code "
+    "snippets. If the user asks to change an earlier document, output the full "
+    "updated document in a <doc> block with the same title."
+)
+
+TITLE_PROMPT = (
+    "Write a short, professional title (2 to 4 words, Title Case, no quotes, "
+    "no ending punctuation) for a chat that starts with the user's message. "
+    "Greetings such as 'hi' or 'hello' become 'Greetings'. Examples: "
+    "'hi' -> Greetings; 'help me plan a website' -> Website Project Plan; "
+    "'explain this NameError' -> Resolving Python NameError; "
+    "'what is 12*7' -> Quick Calculation. Reply with the title only."
+)
+
+DOC_RE = re.compile(
+    r"<doc\s+title\s*=\s*(?:\"([^\"]*)\"|'([^']*)')\s*>(.*?)(?:</doc>|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def split_doc(text):
+    """Split a model reply into (chat_text, doc). doc is None or {title, markdown}."""
+    m = DOC_RE.search(text)
+    if not m:
+        return text.strip(), None
+    title = (m.group(1) or m.group(2) or "Untitled document").strip()
+    body = m.group(3).strip()
+    chat_text = (text[:m.start()] + text[m.end():]).strip()
+    if not body:
+        return chat_text, None
+    if not chat_text:
+        chat_text = 'I created "' + title + '" in Docs.'
+    return chat_text, {"title": title, "markdown": body}
 
 
 def load_owner_info():
@@ -100,14 +144,40 @@ def chat():
             max_tokens=7000,
             reasoning_effort="high",
         )
-        reply = response.choices[0].message.content
+        reply = response.choices[0].message.content or ""
         log_messages([
             {"role": "user", "content": clean[-1]["content"]},
             {"role": "ai", "content": reply},
         ])
-        return jsonify({"reply": reply})
+        chat_text, doc = split_doc(reply)
+        if not chat_text:
+            return jsonify({"error": "Empty reply from the model"}), 502
+        return jsonify({"reply": chat_text, "doc": doc})
     except Exception as e:
         log_messages([{"role": "user", "content": clean[-1]["content"]}])
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/title", methods=["POST"])
+def title():
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text", "")).strip()[:500]
+    if not text:
+        return jsonify({"error": "No text"}), 400
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": TITLE_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=8000,
+            reasoning_effort="high",
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        line = raw.splitlines()[0] if raw else ""
+        return jsonify({"title": line.strip(" \"'`.")[:60]})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
