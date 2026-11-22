@@ -1,10 +1,10 @@
 import json
 import os
 import re
+from flask import Flask, request, jsonify, send_from_directory
 
 from openai import OpenAI
 
-from flask import Flask, request, jsonify, send_from_directory
 app = Flask(__name__)
 
 API_KEY = os.environ.get("API_KEY")
