@@ -47,7 +47,7 @@ HTML_DIR = os.path.join(BASE_DIR, "html")          # new website
 OLD_HTML_DIR = os.path.join(BASE_DIR, "html_old")  # old website (kept for fun)
 
 BASE_PROMPT = (
-    "You are Clustra AI. For normal chat, answer in 1-2 short sentences "
+    "You are Clustra AI. Read the Question thoroughly and answer it after visiting the web."
     "(longer only when the user asks for code or detail).\n\n"
     "DOCUMENTS: when the user asks you to create a standalone document "
     "(a plan, report, essay, study notes, guide, letter, email draft, resume, "
