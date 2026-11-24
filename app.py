@@ -37,7 +37,7 @@ def log_messages(rows):
         print("Log error:", e, flush=True)
 # --------------------------------------
 
-MODEL = "openai/gpt-oss-120b"
+MODEL =
 MAX_MESSAGES = 20
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OWNER_FILE = os.path.join(BASE_DIR, "Remember_owner.json")
