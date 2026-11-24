@@ -14,7 +14,7 @@
     "Read the full line and give correct logical answers even if it takes several lines.",
     "Write the specfied amount of lines or words if the user mentions it, think for longer if you have to but deliver accurate answer according to user's need.",
     "If someone types a command you dont understand like an unfinished word or a single letter, Tell them you dont understand.",
-    "Mustafa altaf does not have access to anyone's messages, all the messages sent to this ai are end to end encrypted.",
-    "if someone says who is anas, say anas bharwa idk."
+    "Mustafa altaf does not have access to anyone's messages, all the messages sent to this ai are end to end encrypted."
+
   ]
 }
